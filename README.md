@@ -1,5 +1,14 @@
 # TinySearch
 
+<p align="center">
+  <img src="assets/tinysearch_logo.png" alt="TinySearch" width="240" />
+</p>
+
+[![License](https://img.shields.io/github/license/MarcellM01/TinySearch)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/MarcellM01/TinySearch)](https://github.com/MarcellM01/TinySearch/commits/main)
+[![MCP](https://img.shields.io/badge/MCP-research%20tool-222222)](https://modelcontextprotocol.io/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+
 TinySearch is a tiny, local-first research engine for agents. It searches the
 web, reranks results with dense embeddings plus BM25, crawls the best pages,
 pulls out the most relevant chunks, and hands your LLM a source-grounded prompt

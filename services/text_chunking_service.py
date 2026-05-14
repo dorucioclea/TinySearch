@@ -6,7 +6,9 @@ from services.token_counter_service import resolve_tokenizer
 def truncate_text_to_max_tokens(
     text: str,
     max_tokens: int | None,
-    encoding_name: str,
+    encoding_name: str | None = None,
+    *,
+    model: str | None = None,
 ) -> str:
     """Keep the start of ``text`` up to ``max_tokens`` (inclusive of tokenizer).
 
@@ -15,7 +17,7 @@ def truncate_text_to_max_tokens(
 
     if not text or max_tokens is None or max_tokens <= 0:
         return text
-    encoding = resolve_tokenizer(encoding_name)
+    encoding = resolve_tokenizer(encoding_name, model=model)
     tokens = encoding.encode(text)
     if len(tokens) <= max_tokens:
         return text
@@ -26,7 +28,9 @@ def chunk_text(
     text: str,
     max_chunk_tokens: int = 500,
     overlap_tokens: int = 80,
-    encoding_name: str = "o200k_base",
+    encoding_name: str | None = None,
+    *,
+    model: str | None = None,
 ) -> list[dict]:
     """
     Structure-aware text chunking.
@@ -34,7 +38,7 @@ def chunk_text(
     Markdown headings are preserved as chunk metadata when present, but callers
     can pass any plain text.
     """
-    encoding = resolve_tokenizer(encoding_name)
+    encoding = resolve_tokenizer(encoding_name, model=model)
 
     import re
 

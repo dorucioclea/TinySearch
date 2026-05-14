@@ -28,10 +28,12 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from services.embedding_service import (
     DEFAULT_EMBEDDING_BACKEND,
+    DEFAULT_EMBEDDING_MODEL,
     DEFAULT_EMBEDDING_OPENAI_ENV_FILE,
-    FIXED_LOCAL_EMBEDDING_MODEL,
     create_embedder,
     normalize_embedding_backend,
+    resolve_local_embedding_model_spec,
+    resolve_embedding_tokenizer_name,
 )
 from services.chunk_pool_selection_service import select_chunks_with_quota_and_fill
 from services.hybrid_embed_search_service import EmbeddingFn, rank_chunks_hybrid
@@ -288,8 +290,9 @@ async def agentic_run(
     chunk_rank_oversample: int = 3,
     chunk_dedupe_jaccard_threshold: float = 0.92,
     chunk_max_per_source_url: int = 4,
-    encoding_name: str = "o200k_base",
+    encoding_name: str | None = None,
     embedding_backend: str | None = None,
+    embedding_model: str | None = None,
     embedding_openai_env_file: str | None = None,
     dense_query_prefix: str = DEFAULT_DENSE_QUERY_PREFIX,
     dense_document_prefix: str = DEFAULT_DENSE_DOCUMENT_PREFIX,
@@ -317,6 +320,11 @@ async def agentic_run(
         chunk_max_results_to_keep = crawl_top_k
     embedding_backend = embedding_backend or DEFAULT_EMBEDDING_BACKEND
     embedding_backend = normalize_embedding_backend(embedding_backend)
+    embedding_model = (
+        str(embedding_model).strip()
+        if embedding_model and str(embedding_model).strip()
+        else DEFAULT_EMBEDDING_MODEL
+    )
     env_file = embedding_openai_env_file
     if not (env_file and str(env_file).strip()):
         env_file = DEFAULT_EMBEDDING_OPENAI_ENV_FILE
@@ -327,7 +335,11 @@ async def agentic_run(
             "local dense embeddings are required; search_dense_weight and "
             "chunk_dense_weight must both be greater than 0"
         )
-
+    local_model_spec = (
+        resolve_local_embedding_model_spec(embedding_model)
+        if embedding_backend == "onnx"
+        else None
+    )
     started_at = datetime.now(UTC).isoformat()
     trace: dict[str, Any] = {
         "query": query,
@@ -357,10 +369,17 @@ async def agentic_run(
             "chunk_rank_oversample": chunk_rank_oversample,
             "chunk_dedupe_jaccard_threshold": chunk_dedupe_jaccard_threshold,
             "chunk_max_per_source_url": chunk_max_per_source_url,
-            "encoding_name": encoding_name,
+            "encoding_name": encoding_name or "embedding",
+            "tokenizer_name": None,
             "embedding_backend": embedding_backend,
+            "embedding_model": embedding_model,
+            "embedding_model_repo_id": (
+                local_model_spec.repo_id if local_model_spec is not None else None
+            ),
+            "embedding_model_local_dir": (
+                str(local_model_spec.local_dir) if local_model_spec is not None else None
+            ),
             "embedding_openai_env_file": env_file,
-            "local_embedding_model": FIXED_LOCAL_EMBEDDING_MODEL,
             "dense_query_prefix": dense_query_prefix,
             "dense_document_prefix": dense_document_prefix,
             "dense_document_embed_batch_size": dense_document_embed_batch_size,
@@ -398,9 +417,21 @@ async def agentic_run(
         prompt = _format_results_prompt(question=query, results=[])
         return finish("no_search_results", prompt, [])
 
+    tokenizer_name = (
+        str(encoding_name).strip()
+        if encoding_name is not None and str(encoding_name).strip().lower() != "embedding"
+        else resolve_embedding_tokenizer_name(
+            backend=embedding_backend,
+            embedding_model=embedding_model,
+            openai_env_file=env_file if embedding_backend == "openai_compatible" else None,
+        )
+    )
+    trace["config"]["tokenizer_name"] = tokenizer_name
+
     if embedder is None:
         embedder = create_embedder(
             backend=embedding_backend,
+            embedding_model=embedding_model,
             openai_env_file=env_file if embedding_backend == "openai_compatible" else None,
         )
     embedding_semaphore = asyncio.Semaphore(max(1, max_concurrent_embedding_calls))
@@ -435,7 +466,7 @@ async def agentic_run(
             try:
                 crawled = await crawl_fn(
                     url=url,
-                    encoding_name=encoding_name,
+                    encoding_name=tokenizer_name,
                     user_query=query,
                     fit_markdown_mode=crawl_fit_markdown_mode,
                     fit_min_chars=crawl_fit_min_chars,
@@ -458,13 +489,13 @@ async def agentic_run(
             markdown = truncate_text_to_max_tokens(
                 markdown,
                 crawl_max_page_tokens,
-                encoding_name,
+                tokenizer_name,
             )
             chunks = chunk_text(
                 markdown,
                 max_chunk_tokens=crawl_max_chunk_tokens,
                 overlap_tokens=crawl_overlap_tokens,
-                encoding_name=encoding_name,
+                encoding_name=tokenizer_name,
             )
             source_chunks = [
                 {

@@ -15,18 +15,27 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from pipelines.agentic_research import agentic_run
 from services.embedding_service import normalize_embedding_backend
-from services.research_config_service import config_trace_path, load_research_config
+from services.research_config_service import (
+    config_trace_path,
+    load_research_config,
+    research_tokenizer_name,
+)
 from services.site_crawl_service import crawl_search
 from services.web_search_service import search, search_to_markdown
+
+
+async def _ensure_local_bundle_for_config(config: dict[str, Any]) -> None:
+    if normalize_embedding_backend(str(config["embedding_backend"])) != "onnx":
+        return
+    from services.onnx_bundle_service import ensure_onnx_bundle_sync
+
+    await asyncio.to_thread(ensure_onnx_bundle_sync, str(config["embedding_model"]))
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     cfg = load_research_config()
-    if normalize_embedding_backend(str(cfg["embedding_backend"])) == "default":
-        from services.onnx_bundle_service import ensure_onnx_bundle_sync
-
-        await asyncio.to_thread(ensure_onnx_bundle_sync)
+    await _ensure_local_bundle_for_config(cfg)
     yield
 
 
@@ -86,6 +95,7 @@ class ResearchRequest(BaseModel):
     dense_document_prefix: str | None = None
     dense_document_embed_batch_size: int | None = Field(default=None, ge=1, le=512)
     encoding_name: str | None = None
+    embedding_model: str | None = None
     trace_path: str | None = None
 
 
@@ -131,7 +141,7 @@ async def site_crawl_endpoint(request: SiteCrawlRequest) -> dict[str, Any]:
         max_chunk_tokens=request.max_chunk_tokens,
         overlap_tokens=request.overlap_tokens,
         max_return_tokens=request.max_return_tokens,
-        encoding_name=request.encoding_name or str(config["encoding_name"]),
+        encoding_name=request.encoding_name or research_tokenizer_name(config),
         crawl4ai_bm25_threshold=request.crawl4ai_bm25_threshold,
         crawl4ai_language=request.crawl4ai_language,
     )
@@ -155,6 +165,11 @@ async def site_crawl_get(
 @app.post("/research")
 async def research_endpoint(request: ResearchRequest) -> dict[str, Any]:
     config = load_research_config()
+    embedding_model = request.embedding_model or str(config["embedding_model"])
+    if normalize_embedding_backend(str(config["embedding_backend"])) == "onnx":
+        from services.onnx_bundle_service import ensure_onnx_bundle_sync
+
+        await asyncio.to_thread(ensure_onnx_bundle_sync, embedding_model)
     result = await agentic_run(
         request.query,
         search_top_k=request.search_top_k or int(config["search_top_k"]),
@@ -224,6 +239,7 @@ async def research_endpoint(request: ResearchRequest) -> dict[str, Any]:
             else float(config["crawl_pruning_threshold"])
         ),
         embedding_backend=str(config["embedding_backend"]),
+        embedding_model=embedding_model,
         embedding_openai_env_file=str(config["embedding_openai_env_file"]),
         dense_query_prefix=request.dense_query_prefix
         if request.dense_query_prefix is not None

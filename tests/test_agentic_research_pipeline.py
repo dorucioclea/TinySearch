@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from pipelines.agentic_research import agentic_run
 from services.web_search_service import SearchResult
@@ -70,10 +71,10 @@ class AgenticResearchPipelineTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("SEARCH-GROUNDED ANSWER PROMPT", result.answer)
         self.assertIn("CRITICAL INSTRUCTIONS", result.answer)
-        self.assertIn("You are answering a question using search results.", result.answer)
+        self.assertIn("You are answering the QUESTION using only the text under RESULTS.", result.answer)
         self.assertIn("TODAY", result.answer)
-        self.assertIn("Use TODAY to understand relative dates", result.answer)
-        self.assertIn("If the RESULTS text contains dates", result.answer)
+        self.assertIn("First resolve any relative date in the QUESTION using TODAY.", result.answer)
+        self.assertIn("Use only facts directly supported by RESULTS.", result.answer)
         self.assertIn("RESULTS", result.answer)
         self.assertIn("RESULT 1", result.answer)
         self.assertIn("TITLE 1\n======\nPython Async Search", result.answer)
@@ -83,12 +84,13 @@ class AgenticResearchPipelineTests(unittest.IsolatedAsyncioTestCase):
             result.answer,
         )
         self.assertIn("RELEVANT TEXT 1\n======", result.answer)
+        self.assertIn("----- RELEVANT CHUNK 1 -----", result.answer)
         self.assertIn(
-            "----- RELEVANT CHUNK 1 -----\nPython asyncio search uses async tasks.",
+            "Python asyncio search uses async tasks.",
             result.answer,
         )
         self.assertIn("python async search", result.answer)
-        self.assertEqual(result.answer.count("QUESTION"), 2)
+        self.assertEqual(result.answer.count("\nQUESTION\n"), 2)
         self.assertEqual(result.answer.count("\nTODAY\n"), 2)
         self.assertNotIn("START", result.answer)
         self.assertNotIn("END", result.answer)
@@ -123,11 +125,34 @@ class AgenticResearchPipelineTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("RESULT 1", result.answer)
         self.assertIn("RESULT 2", result.answer)
-        self.assertIn(
-            "----- RELEVANT CHUNK 1 -----\nPython asyncio search uses async tasks.",
-            result.answer,
-        )
+        self.assertIn("----- RELEVANT CHUNK 1 -----", result.answer)
+        self.assertIn("Python asyncio search uses async tasks.", result.answer)
         self.assertEqual(result.answer.count("----- RELEVANT CHUNK 1 -----"), 1)
+
+    async def test_pipeline_uses_embedding_tokenizer_for_crawl_chunks(self) -> None:
+        seen_encoding_names: list[str] = []
+
+        async def recording_crawl(**kwargs):
+            seen_encoding_names.append(kwargs["encoding_name"])
+            return await _fake_crawl(**kwargs)
+
+        with patch(
+            "pipelines.agentic_research.resolve_embedding_tokenizer_name",
+            return_value="embedding-tokenizer",
+        ):
+            await agentic_run(
+                "python async search",
+                search_top_k=1,
+                search_max_results_to_keep=1,
+                chunk_max_results_to_keep=1,
+                crawl_max_chunk_tokens=40,
+                crawl_overlap_tokens=0,
+                embedder=_fake_embedder,
+                search_fn=_fake_search,
+                crawl_fn=recording_crawl,
+            )
+
+        self.assertEqual(seen_encoding_names, ["embedding-tokenizer"])
 
     async def test_pipeline_rejects_bm25_only_configuration(self) -> None:
         with self.assertRaises(ValueError):

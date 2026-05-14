@@ -6,7 +6,11 @@ from typing import Any
 
 from services.embedding_service import (
     DEFAULT_EMBEDDING_BACKEND,
+    DEFAULT_EMBEDDING_MODEL,
     DEFAULT_EMBEDDING_OPENAI_ENV_FILE,
+    normalize_embedding_backend,
+    resolve_local_embedding_model_spec,
+    resolve_embedding_tokenizer_name,
 )
 
 
@@ -36,8 +40,9 @@ DEFAULT_RESEARCH_CONFIG: dict[str, Any] = {
     "crawl_max_chunk_tokens": 300,
     "crawl_overlap_tokens": 80,
     "crawl_max_page_tokens": 0,
-    "encoding_name": "o200k_base",
+    "encoding_name": "embedding",
     "embedding_backend": DEFAULT_EMBEDDING_BACKEND,
+    "embedding_model": DEFAULT_EMBEDDING_MODEL,
     "embedding_openai_env_file": DEFAULT_EMBEDDING_OPENAI_ENV_FILE,
     "dense_query_prefix": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
     "dense_document_prefix": "",
@@ -75,7 +80,7 @@ _FLOAT_FIELDS = {
 def _coerce_config(raw: dict[str, Any]) -> dict[str, Any]:
     config = dict(DEFAULT_RESEARCH_CONFIG)
     config.update(raw)
-    for legacy in ("embedding_model", "embedding_gguf_file", "mcp_transport"):
+    for legacy in ("embedding_gguf_file", "mcp_transport"):
         config.pop(legacy, None)
     for key in _INT_FIELDS:
         config[key] = int(config[key])
@@ -84,6 +89,7 @@ def _coerce_config(raw: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "encoding_name",
         "embedding_backend",
+        "embedding_model",
         "embedding_openai_env_file",
         "dense_query_prefix",
         "dense_document_prefix",
@@ -135,12 +141,47 @@ def research_run_kwargs(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "crawl_max_page_tokens",
         "encoding_name",
         "embedding_backend",
+        "embedding_model",
         "embedding_openai_env_file",
         "dense_query_prefix",
         "dense_document_prefix",
         "dense_document_embed_batch_size",
     )
     return {key: config[key] for key in keys}
+
+
+def research_embedding_model_info(config: dict[str, Any] | None = None) -> dict[str, str]:
+    config = load_research_config() if config is None else config
+    backend = normalize_embedding_backend(str(config["embedding_backend"]))
+    if backend == "openai_compatible":
+        return {
+            "requested_model": "",
+            "repo_id": "",
+            "local_dir": "",
+        }
+    spec = resolve_local_embedding_model_spec(str(config["embedding_model"]))
+    return {
+        "requested_model": spec.requested_model,
+        "repo_id": spec.repo_id,
+        "local_dir": str(spec.local_dir),
+    }
+
+
+def research_tokenizer_name(config: dict[str, Any] | None = None) -> str:
+    config = load_research_config() if config is None else config
+    encoding_name = str(config.get("encoding_name") or "").strip()
+    if encoding_name and encoding_name.lower() != "embedding":
+        return encoding_name
+    backend = normalize_embedding_backend(str(config["embedding_backend"]))
+    return resolve_embedding_tokenizer_name(
+        backend=backend,
+        embedding_model=str(config["embedding_model"]),
+        openai_env_file=(
+            str(config["embedding_openai_env_file"])
+            if backend == "openai_compatible"
+            else None
+        ),
+    )
 
 
 def config_trace_path(config: dict[str, Any] | None = None) -> Path | None:

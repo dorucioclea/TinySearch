@@ -15,7 +15,12 @@ from mcp.server.fastmcp import FastMCP
 
 from pipelines.agentic_research import agentic_run
 from services.embedding_service import normalize_embedding_backend
-from services.research_config_service import config_trace_path, load_research_config, research_run_kwargs
+from services.research_config_service import (
+    config_trace_path,
+    load_research_config,
+    research_run_kwargs,
+    research_tokenizer_name,
+)
 from services.token_counter_service import token_count
 
 
@@ -40,8 +45,15 @@ def _research_settings() -> dict[str, Any]:
 
 
 def _answer_tokens(answer: str) -> int:
-    encoding_name = str(load_research_config()["encoding_name"])
-    return token_count(answer, encoding_name=encoding_name)
+    return token_count(answer, encoding_name=research_tokenizer_name())
+
+
+def _ensure_local_bundle_for_config(config: dict[str, Any]) -> None:
+    if normalize_embedding_backend(str(config["embedding_backend"])) != "onnx":
+        return
+    from services.onnx_bundle_service import ensure_onnx_bundle_sync
+
+    ensure_onnx_bundle_sync(str(config["embedding_model"]))
 
 
 def _validate_query(query: str) -> str:
@@ -107,10 +119,7 @@ async def research(query: str) -> dict[str, Any]:
 if __name__ == "__main__":
     _enable_traceback_dump()
     cfg = load_research_config()
-    if normalize_embedding_backend(str(cfg["embedding_backend"])) == "default":
-        from services.onnx_bundle_service import ensure_onnx_bundle_sync
-
-        ensure_onnx_bundle_sync()
+    _ensure_local_bundle_for_config(cfg)
     transport = os.environ.get("MCP_TRANSPORT", "stdio").strip() or "stdio"
     if transport not in {"stdio", "sse", "streamable-http"}:
         raise ValueError(

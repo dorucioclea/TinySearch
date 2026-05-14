@@ -23,7 +23,7 @@ no hosted dashboard, no account system, no analytics, no scraped data cache.
 - Give agents a compact web research tool they can call over MCP.
 - Keep source URLs attached to every factual claim your LLM should make.
 - Avoid dumping entire pages into context when a few ranked chunks will do.
-- Let you swap between the default local embedding model and an OpenAI-compatible embedding API.
+- Let you swap between local ONNX embedding models and an OpenAI-compatible embedding API.
 
 ## What It Does
 
@@ -55,15 +55,14 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The default embedding backend prefers an ONNX bundle under
-`models/all-minilm-l6-v2-onnx/`: starting the MCP server or FastAPI app downloads it
-once from Hugging Face when `embedding_backend` is `default` (model license Apache-2.0).
-Without those files, the fixed MiniLM model loads via `sentence-transformers` on first use;
-weights cache outside the repo by default. Set `TINYSEARCH_HF_CACHE` to pin that cache.
+The `onnx` embedding backend uses local ONNX bundles under `models/`. Starting the
+MCP server or FastAPI app downloads the configured `embedding_model` once from Hugging
+Face when `embedding_backend` is `onnx`.
 
-You can also vendor or export the ONNX bundle yourself (see
-`models/all-minilm-l6-v2-onnx/README.md` and `scripts/export_embedding_onnx.py`). Override
-the ONNX directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
+Built-in local presets are `fast` (`onnx-models/all-MiniLM-L6-v2-onnx`),
+`balanced` (`BAAI/bge-small-en-v1.5`), and `quality` (`BAAI/bge-base-en-v1.5`).
+You can also set `embedding_model` to a custom Hugging Face ONNX repo id. Override
+the resolved ONNX directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
 
 ## MCP Setup
 
@@ -217,8 +216,9 @@ Tune research defaults in `configs/research_config.json`:
 
 - Search: `search_top_k`, `search_rrf_cutoff`, `search_dense_weight`, `search_max_results_to_keep`
 - Chunks: `chunk_rrf_cutoff`, `chunk_dense_weight`, `chunk_max_results_to_keep` (default `2`, global across the chunk pool)
-- Crawl: `crawl_max_chunk_tokens` (default `300`), `crawl_overlap_tokens`, `max_concurrent_crawls`
-- Embeddings: `embedding_backend` (`default` = ONNX bundle auto-downloaded or exported under `models/all-minilm-l6-v2-onnx/` when present, otherwise fixed local `all-MiniLM-L6-v2` via `sentence-transformers` cached outside the repo; `openai_compatible`), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_ONNX_MODEL_DIR` for a custom ONNX bundle path
+- Crawl: `crawl_max_chunk_tokens` (default `300`, counted with the embedding model tokenizer), `crawl_overlap_tokens`, `max_concurrent_crawls`
+- Embeddings: `embedding_backend` (`onnx` = local ONNX bundle, `openai_compatible` = API; legacy `default` still aliases to `onnx`), `embedding_model` (`fast`, `balanced`, `quality`, or a custom Hugging Face ONNX repo id), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_ONNX_MODEL_DIR` for an expert bundle path override
+- Tokenizer: `encoding_name` defaults to `embedding`, which means chunk budgets use the tokenizer for the configured embedding backend. Set it to a specific tiktoken encoding or local tokenizer path only when you intentionally want a different counter.
 - Dense input prefixes: `dense_query_prefix`, `dense_document_prefix`
 - Trace: `trace_path`
 
@@ -242,11 +242,11 @@ python -m unittest discover tests
 
 Source code in this repository is under the [MIT License](LICENSE).
 
-When `embedding_backend` is `default`, TinySearch may download the MiniLM ONNX bundle at
-runtime from Hugging Face (`onnx-models/all-MiniLM-L6-v2-onnx`). Those weights are a
-separate distribution under **Apache License 2.0**—keep license and attribution notices
-if you ship or redistribute those files. Optional manual export uses
-`sentence-transformers/all-MiniLM-L6-v2`, also Apache-2.0.
+When `embedding_backend` is `onnx`, TinySearch may download the selected local ONNX
+embedding bundle at runtime from Hugging Face. Those weights are separate distributions
+under their model-card licenses; keep license and attribution notices if you ship or
+redistribute those files. Optional manual export for `fast` uses
+`sentence-transformers/all-MiniLM-L6-v2` (Apache-2.0).
 
 ## Privacy Notes
 

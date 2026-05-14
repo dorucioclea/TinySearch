@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 
 DEFAULT_ENCODING_NAME = "o200k_base"
+EMBEDDING_TOKENIZER_NAME = "embedding"
 
 
 class HuggingFaceTokenizerAdapter:
@@ -35,6 +37,17 @@ class TiktokenAdapter:
 
     def decode(self, tokens: list[int]) -> str:
         return self._encoding.decode(tokens)
+
+
+class TokenizersAdapter:
+    def __init__(self, tokenizer: Any) -> None:
+        self._tokenizer = tokenizer
+
+    def encode(self, text: str) -> list[int]:
+        return self._tokenizer.encode(text).ids
+
+    def decode(self, tokens: list[int]) -> str:
+        return self._tokenizer.decode(tokens, skip_special_tokens=True)
 
 
 def _tiktoken_module():
@@ -78,6 +91,32 @@ def _resolve_huggingface_tokenizer(name: str):
     return HuggingFaceTokenizerAdapter(tokenizer)
 
 
+def _resolve_tokenizers_json(name: str):
+    try:
+        from tokenizers import Tokenizer
+    except Exception:
+        return None
+
+    path = Path(name).expanduser()
+    if path.is_dir():
+        path = path / "tokenizer.json"
+    if not path.is_file():
+        return None
+    try:
+        return TokenizersAdapter(Tokenizer.from_file(str(path)))
+    except Exception:
+        return None
+
+
+def normalize_tokenizer_name(tokenizer_name: str | None) -> str | None:
+    if tokenizer_name is None:
+        return None
+    name = str(tokenizer_name).strip()
+    if not name or name.lower() == EMBEDDING_TOKENIZER_NAME:
+        return None
+    return name
+
+
 @lru_cache(maxsize=64)
 def resolve_tokenizer(
     tokenizer_name: str | None = None,
@@ -91,6 +130,7 @@ def resolve_tokenizer(
     then tiktoken's explicit encoding/model mapping, then fall back to the
     default OpenAI tokenizer.
     """
+    tokenizer_name = normalize_tokenizer_name(tokenizer_name)
     if tokenizer_name:
         encoding = _get_tiktoken_encoding(tokenizer_name)
         if encoding is not None:
@@ -100,6 +140,9 @@ def resolve_tokenizer(
     for candidate in candidates:
         if not candidate:
             continue
+        tokenizers_json = _resolve_tokenizers_json(candidate)
+        if tokenizers_json is not None:
+            return tokenizers_json
         hf_tokenizer = _resolve_huggingface_tokenizer(candidate)
         if hf_tokenizer is not None:
             return hf_tokenizer

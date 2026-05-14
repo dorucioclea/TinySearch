@@ -1,4 +1,4 @@
-"""Download and persist the MiniLM ONNX bundle under ``embedding_service._onnx_bundle_dir()``."""
+"""Download and persist local ONNX embedding bundles under ``models/``."""
 
 from __future__ import annotations
 
@@ -13,13 +13,9 @@ from pathlib import Path
 from huggingface_hub import snapshot_download
 
 from services.embedding_service import (
-    _onnx_bundle_dir,
     _onnx_bundle_ready,
     clear_onnx_runtime_cache,
-)
-from services.onnx_bundle_constants import (
-    MINILM_ONNX_BUNDLE_ALLOW_PATTERNS,
-    MINILM_ONNX_BUNDLE_REPO_ID,
+    resolve_local_embedding_model_spec,
 )
 
 _LOCK_NAME = ".download.lock"
@@ -58,20 +54,33 @@ def _exclusive_bundle_lock(bundle_dir: Path):
         lock_path.unlink(missing_ok=True)
 
 
-def ensure_onnx_bundle_sync() -> None:
+def _copy_tree(src: Path, dest: Path) -> None:
+    for path in src.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(src)
+        if rel.parts and rel.parts[0] == ".cache":
+            continue
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+
+
+def ensure_onnx_bundle_sync(embedding_model: str | None = None) -> None:
     """If the ONNX bundle is missing, download it once into the bundle directory."""
-    if _onnx_bundle_ready():
+    if _onnx_bundle_ready(embedding_model):
         return
 
-    dest = _onnx_bundle_dir()
+    spec = resolve_local_embedding_model_spec(embedding_model)
+    dest = spec.local_dir
     with _exclusive_bundle_lock(dest):
-        if _onnx_bundle_ready():
+        if _onnx_bundle_ready(embedding_model):
             return
 
         print(
             "[tinysearch] downloading ONNX embedding bundle "
-            f"({MINILM_ONNX_BUNDLE_REPO_ID}); model license: Apache-2.0 "
-            "(see Hugging Face model card). One-time fetch.",
+            f"model={spec.requested_model!r} repo={spec.repo_id!r}; "
+            "see Hugging Face model card for license. One-time fetch.",
             file=sys.stderr,
             flush=True,
         )
@@ -80,27 +89,18 @@ def ensure_onnx_bundle_sync() -> None:
         with tempfile.TemporaryDirectory(prefix="tinysearch-onnx-dl-") as td_raw:
             td = Path(td_raw)
             snapshot_download(
-                repo_id=MINILM_ONNX_BUNDLE_REPO_ID,
+                repo_id=spec.repo_id,
                 local_dir=str(td),
                 local_dir_use_symlinks=False,
-                allow_patterns=list(MINILM_ONNX_BUNDLE_ALLOW_PATTERNS),
+                allow_patterns=list(spec.allow_patterns),
             )
-            missing = [
-                name
-                for name in MINILM_ONNX_BUNDLE_ALLOW_PATTERNS
-                if not (td / name).is_file()
-            ]
-            if missing:
-                raise RuntimeError(
-                    "ONNX bundle download incomplete; missing: "
-                    + ", ".join(sorted(missing))
-                )
-            for name in MINILM_ONNX_BUNDLE_ALLOW_PATTERNS:
-                shutil.copy2(td / name, dest / name)
+            _copy_tree(td, dest)
 
-        if not _onnx_bundle_ready():
+        if not _onnx_bundle_ready(embedding_model):
             raise RuntimeError(
-                f"ONNX bundle still incomplete after download under {dest}"
+                f"ONNX bundle for {spec.requested_model!r} is incomplete after "
+                f"download from {spec.repo_id!r} under {dest}. Expected an ONNX "
+                "model plus tokenizer files."
             )
 
     clear_onnx_runtime_cache()

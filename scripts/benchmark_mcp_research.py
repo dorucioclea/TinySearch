@@ -14,12 +14,11 @@ Logging toggles: `_PHASE_LOG`, `_SHOW_PROGRESS` (MCP tool progress), `_SHOW_MCP_
 pipeline embedding timing (`TINYSEARCH_LOG_EMBED_TIMING` in the child process).
 
 By default the benchmark **requires** the ONNX bundle (onnxruntime path) so timings
-match the intended fast path. With `embedding_backend` `default` in
+match the intended fast path. With `embedding_backend` `onnx` in
 `configs/research_config.json`, this script **prefetches** the bundle via the same
 `ensure_onnx_bundle_sync()` used by `servers/mcp_server.py` before spawning the child,
 so the first run does not fail when weights are gitignored. Set
-`_REQUIRE_ONNX_BUNDLE = False` to allow PyTorch `SentenceTransformers` fallback when the
-bundle is missing or to benchmark with `openai_compatible` embeddings.
+`_REQUIRE_ONNX_BUNDLE = False` to benchmark with `openai_compatible` embeddings.
 """
 
 from __future__ import annotations
@@ -42,8 +41,8 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from services.embedding_service import (
-    default_local_will_use_onnx_bundle,
     normalize_embedding_backend,
+    onnx_backend_will_use_onnx_bundle,
 )
 from services.onnx_bundle_service import ensure_onnx_bundle_sync
 from services.research_config_service import load_research_config
@@ -206,25 +205,24 @@ if __name__ == "__main__":
 
     _cfg = load_research_config()
     _backend = normalize_embedding_backend(str(_cfg["embedding_backend"]))
-    if _REQUIRE_ONNX_BUNDLE and _backend != "default":
+    if _REQUIRE_ONNX_BUNDLE and _backend != "onnx":
         raise SystemExit(
             "_REQUIRE_ONNX_BUNDLE is True but configs/research_config.json has "
             f"embedding_backend={_cfg['embedding_backend']!r} (resolved {_backend!r}). "
-            "Use default local embeddings or set _REQUIRE_ONNX_BUNDLE = False."
+            "Use onnx local embeddings or set _REQUIRE_ONNX_BUNDLE = False."
         )
     if _REQUIRE_ONNX_BUNDLE:
-        ensure_onnx_bundle_sync()
+        ensure_onnx_bundle_sync(str(_cfg["embedding_model"]))
 
-    _onnx_ok = default_local_will_use_onnx_bundle()
-    _kind = "onnx bundle (onnxruntime)" if _onnx_ok else "sentence-transformers (PyTorch)"
-    print(f"[benchmark] repo default local embeddings -> {_kind}", flush=True)
+    _onnx_ok = onnx_backend_will_use_onnx_bundle(str(_cfg["embedding_model"]))
+    _kind = "onnx bundle (onnxruntime)" if _onnx_ok else "missing ONNX bundle"
+    print(f"[benchmark] repo onnx local embeddings -> {_kind}", flush=True)
     if _REQUIRE_ONNX_BUNDLE and not _onnx_ok:
         raise SystemExit(
             "Benchmark requires a complete ONNX bundle under "
-            f"{_PROJECT_ROOT / 'models' / 'all-minilm-l6-v2-onnx'} "
-            "(see models/all-minilm-l6-v2-onnx/README.md). "
+            f"{_PROJECT_ROOT / 'models'} for embedding_model={_cfg['embedding_model']!r}. "
             "Prefetch failed; check network/Hugging Face access, run "
-            "scripts/export_embedding_onnx.py, or set _REQUIRE_ONNX_BUNDLE = False."
+            "scripts/export_embedding_onnx.py for fast, or set _REQUIRE_ONNX_BUNDLE = False."
         )
 
     _tool_timeout = timedelta(seconds=max(1, _TOOL_TIMEOUT_SECONDS))

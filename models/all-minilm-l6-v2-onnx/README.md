@@ -6,11 +6,11 @@ much faster cold start than loading PyTorch inside `SentenceTransformer`.
 
 ## Automatic download
 
-When `embedding_backend` in `configs/research_config.json` is `default` (aliases:
-`local`, `sentence_transformers`), starting **`servers/mcp_server.py`** or
+When `embedding_backend` in `configs/research_config.json` is `onnx` and
+`embedding_model` is `fast`, starting **`servers/mcp_server.py`** or
 **`servers/fastapi_server.py`** downloads the bundle once from Hugging Face
-(`onnx-models/all-MiniLM-L6-v2-onnx`) into this directory. The model is **Apache-2.0**
-— keep attribution when redistributing these files.
+(`onnx-models/all-MiniLM-L6-v2-onnx`) into this directory. The model is
+**Apache-2.0** — keep attribution when redistributing these files.
 
 Override the directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
 

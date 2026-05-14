@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -12,15 +14,27 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field, HttpUrl
 
 from pipelines.agentic_research import agentic_run
+from services.embedding_service import normalize_embedding_backend
 from services.research_config_service import config_trace_path, load_research_config
 from services.site_crawl_service import crawl_search
 from services.web_search_service import search, search_to_markdown
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    cfg = load_research_config()
+    if normalize_embedding_backend(str(cfg["embedding_backend"])) == "default":
+        from services.onnx_bundle_service import ensure_onnx_bundle_sync
+
+        await asyncio.to_thread(ensure_onnx_bundle_sync)
+    yield
 
 
 app = FastAPI(
     title="TinySearch API",
     description="Web search, site crawl, and hybrid research endpoints.",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 

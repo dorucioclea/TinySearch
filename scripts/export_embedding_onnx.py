@@ -5,9 +5,11 @@ Writes to models/all-minilm-l6-v2-onnx/ (repo root). Requires PyTorch, transform
 sentence-transformers, and the ``onnx`` package (``pip install onnx``). Runtime
 inference uses ``onnxruntime`` only.
 
-Edit the variables under ``if __name__ == "__main__"`` then run:
+Run:
 
   python scripts/export_embedding_onnx.py
+
+Uses ``services.onnx_bundle_constants.MINILM_SENTENCE_TRANSFORMERS_REPO_ID`` as the HF source.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+from services.onnx_bundle_constants import MINILM_SENTENCE_TRANSFORMERS_REPO_ID
 
 
 def _export(hf_model_id: str, out_dir: Path) -> None:
@@ -73,6 +77,5 @@ def _export(hf_model_id: str, out_dir: Path) -> None:
 
 
 if __name__ == "__main__":
-    _HF_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
     _OUT_DIR = _PROJECT_ROOT / "models" / "all-minilm-l6-v2-onnx"
-    _export(_HF_MODEL_ID, _OUT_DIR)
+    _export(MINILM_SENTENCE_TRANSFORMERS_REPO_ID, _OUT_DIR)

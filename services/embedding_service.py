@@ -88,6 +88,11 @@ def _load_onnx_runtime_bundle() -> tuple[Any, Any]:
     return session, tokenizer
 
 
+def clear_onnx_runtime_cache() -> None:
+    """Drop cached ONNX session/tokenizer after replacing files under ``_onnx_bundle_dir()``."""
+    _load_onnx_runtime_bundle.cache_clear()
+
+
 def _embed_onnx_sync(inputs: list[str]) -> list[list[float]]:
     import numpy as np
 
@@ -120,10 +125,14 @@ def _embed_onnx_sync(inputs: list[str]) -> list[list[float]]:
                 ],
                 dtype=np.int64,
             )
-            ort_inputs = {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-            }
+            input_names = {i.name for i in session.get_inputs()}
+            ort_inputs: dict[str, Any] = {}
+            if "input_ids" in input_names:
+                ort_inputs["input_ids"] = input_ids
+            if "attention_mask" in input_names:
+                ort_inputs["attention_mask"] = attention_mask
+            if "token_type_ids" in input_names:
+                ort_inputs["token_type_ids"] = np.zeros_like(input_ids)
             out = session.run(("sentence_embedding",), ort_inputs)[0]
             all_rows.extend(out.tolist())
         embed_s = time.perf_counter() - t_embed0

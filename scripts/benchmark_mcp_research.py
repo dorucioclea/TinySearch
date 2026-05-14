@@ -13,9 +13,13 @@ Logging toggles: `_PHASE_LOG`, `_SHOW_PROGRESS` (MCP tool progress), `_SHOW_MCP_
 `[research]` / `[tinysearch]` lines, appears sooner). `_LOG_EMBED_TIMING` turns on
 pipeline embedding timing (`TINYSEARCH_LOG_EMBED_TIMING` in the child process).
 
-By default the benchmark **requires** the shipped ONNX bundle so timings match the
-intended fast path; set `_REQUIRE_ONNX_BUNDLE = False` to allow PyTorch
-`SentenceTransformers` fallback when the bundle is missing.
+By default the benchmark **requires** the ONNX bundle (onnxruntime path) so timings
+match the intended fast path. With `embedding_backend` `default` in
+`configs/research_config.json`, this script **prefetches** the bundle via the same
+`ensure_onnx_bundle_sync()` used by `servers/mcp_server.py` before spawning the child,
+so the first run does not fail when weights are gitignored. Set
+`_REQUIRE_ONNX_BUNDLE = False` to allow PyTorch `SentenceTransformers` fallback when the
+bundle is missing or to benchmark with `openai_compatible` embeddings.
 """
 
 from __future__ import annotations
@@ -37,7 +41,12 @@ import mcp.types as types
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
-from services.embedding_service import default_local_will_use_onnx_bundle
+from services.embedding_service import (
+    default_local_will_use_onnx_bundle,
+    normalize_embedding_backend,
+)
+from services.onnx_bundle_service import ensure_onnx_bundle_sync
+from services.research_config_service import load_research_config
 
 
 def _phase(label: str, t0: float, enabled: bool) -> None:
@@ -195,15 +204,27 @@ if __name__ == "__main__":
     if not _LIST_TOOLS_ONLY and not (_QUERY or "").strip():
         raise SystemExit("set _QUERY when _LIST_TOOLS_ONLY is False")
 
+    _cfg = load_research_config()
+    _backend = normalize_embedding_backend(str(_cfg["embedding_backend"]))
+    if _REQUIRE_ONNX_BUNDLE and _backend != "default":
+        raise SystemExit(
+            "_REQUIRE_ONNX_BUNDLE is True but configs/research_config.json has "
+            f"embedding_backend={_cfg['embedding_backend']!r} (resolved {_backend!r}). "
+            "Use default local embeddings or set _REQUIRE_ONNX_BUNDLE = False."
+        )
+    if _REQUIRE_ONNX_BUNDLE:
+        ensure_onnx_bundle_sync()
+
     _onnx_ok = default_local_will_use_onnx_bundle()
     _kind = "onnx bundle (onnxruntime)" if _onnx_ok else "sentence-transformers (PyTorch)"
     print(f"[benchmark] repo default local embeddings -> {_kind}", flush=True)
     if _REQUIRE_ONNX_BUNDLE and not _onnx_ok:
         raise SystemExit(
-            "Benchmark expects the shipped ONNX bundle under "
+            "Benchmark requires a complete ONNX bundle under "
             f"{_PROJECT_ROOT / 'models' / 'all-minilm-l6-v2-onnx'} "
             "(see models/all-minilm-l6-v2-onnx/README.md). "
-            "Run scripts/export_embedding_onnx.py, or set _REQUIRE_ONNX_BUNDLE = False."
+            "Prefetch failed; check network/Hugging Face access, run "
+            "scripts/export_embedding_onnx.py, or set _REQUIRE_ONNX_BUNDLE = False."
         )
 
     _tool_timeout = timedelta(seconds=max(1, _TOOL_TIMEOUT_SECONDS))

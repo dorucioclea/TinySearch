@@ -5,6 +5,7 @@
 </p>
 
 [![License](https://img.shields.io/github/license/MarcellM01/TinySearch)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/MarcellM01/TinySearch?sort=semver)](https://github.com/MarcellM01/TinySearch/releases)
 [![Last commit](https://img.shields.io/github/last-commit/MarcellM01/TinySearch)](https://github.com/MarcellM01/TinySearch/commits/main)
 [![MCP](https://img.shields.io/badge/MCP-research%20tool-222222)](https://modelcontextprotocol.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -54,15 +55,15 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The default embedding backend downloads `all-MiniLM-L6-v2` through
-`sentence-transformers` on first use and caches it outside the repo. Set
-`TINYSEARCH_HF_CACHE` if you want to choose the cache location.
+The default embedding backend prefers an ONNX bundle under
+`models/all-minilm-l6-v2-onnx/`: starting the MCP server or FastAPI app downloads it
+once from Hugging Face when `embedding_backend` is `default` (model license Apache-2.0).
+Without those files, the fixed MiniLM model loads via `sentence-transformers` on first use;
+weights cache outside the repo by default. Set `TINYSEARCH_HF_CACHE` to pin that cache.
 
-For faster cold starts (especially in MCP subprocesses), ship the ONNX bundle under
-`models/all-minilm-l6-v2-onnx/` (see `models/all-minilm-l6-v2-onnx/README.md` and
-`scripts/export_embedding_onnx.py`). When `model.onnx` and tokenizer files are
-present, TinySearch uses `onnxruntime` instead of loading the PyTorch stack. Override
-the directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
+You can also vendor or export the ONNX bundle yourself (see
+`models/all-minilm-l6-v2-onnx/README.md` and `scripts/export_embedding_onnx.py`). Override
+the ONNX directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
 
 ## MCP Setup
 
@@ -217,7 +218,7 @@ Tune research defaults in `configs/research_config.json`:
 - Search: `search_top_k`, `search_rrf_cutoff`, `search_dense_weight`, `search_max_results_to_keep`
 - Chunks: `chunk_rrf_cutoff`, `chunk_dense_weight`, `chunk_max_results_to_keep` (default `2`, global across the chunk pool)
 - Crawl: `crawl_max_chunk_tokens` (default `300`), `crawl_overlap_tokens`, `max_concurrent_crawls`
-- Embeddings: `embedding_backend` (`default` = ONNX bundle in `models/all-minilm-l6-v2-onnx/` when present, otherwise fixed local `all-MiniLM-L6-v2` via `sentence-transformers` cached outside the repo, or `openai_compatible`), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_ONNX_MODEL_DIR` for a custom ONNX bundle path
+- Embeddings: `embedding_backend` (`default` = ONNX bundle auto-downloaded or exported under `models/all-minilm-l6-v2-onnx/` when present, otherwise fixed local `all-MiniLM-L6-v2` via `sentence-transformers` cached outside the repo; `openai_compatible`), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_ONNX_MODEL_DIR` for a custom ONNX bundle path
 - Dense input prefixes: `dense_query_prefix`, `dense_document_prefix`
 - Trace: `trace_path`
 
@@ -236,6 +237,16 @@ Run the unittest suite:
 ```bash
 python -m unittest discover tests
 ```
+
+## License
+
+Source code in this repository is under the [MIT License](LICENSE).
+
+When `embedding_backend` is `default`, TinySearch may download the MiniLM ONNX bundle at
+runtime from Hugging Face (`onnx-models/all-MiniLM-L6-v2-onnx`). Those weights are a
+separate distribution under **Apache License 2.0**—keep license and attribution notices
+if you ship or redistribute those files. Optional manual export uses
+`sentence-transformers/all-MiniLM-L6-v2`, also Apache-2.0.
 
 ## Privacy Notes
 

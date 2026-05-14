@@ -8,3 +8,12 @@ __pycache__/
 .ruff_cache/
 venv/
 .venv/
+
+# MiniLM ONNX bundle (auto-download on MCP/API startup when embedding_backend is default,
+# or produced by scripts/export_embedding_onnx.py). Apache-2.0 — do not relicense as MIT.
+models/all-minilm-l6-v2-onnx/model.onnx
+models/all-minilm-l6-v2-onnx/tokenizer.json
+models/all-minilm-l6-v2-onnx/tokenizer_config.json
+models/all-minilm-l6-v2-onnx/special_tokens_map.json
+models/all-minilm-l6-v2-onnx/vocab.txt
+models/all-minilm-l6-v2-onnx/.download.lock

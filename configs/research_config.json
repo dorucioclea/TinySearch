@@ -23,7 +23,7 @@
   "crawl_max_page_tokens": 0,
   "encoding_name": "embedding",
   "embedding_backend": "onnx",
-  "embedding_model": "quality",
+  "embedding_model": "fast",
   "embedding_openai_env_file": ".env",
   "dense_query_prefix": "",
   "dense_document_prefix": "",

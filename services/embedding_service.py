@@ -91,6 +91,9 @@ _PRESET_MODELS: dict[str, dict[str, Any]] = {
 
 
 def _models_dir() -> Path:
+    raw_override = os.environ.get("TINYSEARCH_MODELS_DIR", "").strip()
+    if raw_override:
+        return Path(raw_override).expanduser().resolve()
     return (_PROJECT_ROOT / "models").resolve()
 
 

@@ -61,8 +61,10 @@ Face when `embedding_backend` is `onnx`.
 
 Built-in local presets are `fast` (`onnx-models/all-MiniLM-L6-v2-onnx`),
 `balanced` (`BAAI/bge-small-en-v1.5`), and `quality` (`BAAI/bge-base-en-v1.5`).
-You can also set `embedding_model` to a custom Hugging Face ONNX repo id. Override
-the resolved ONNX directory with `TINYSEARCH_ONNX_MODEL_DIR` if needed.
+You can also set `embedding_model` to a custom Hugging Face ONNX repo id. Set
+`TINYSEARCH_MODELS_DIR` to move the whole model cache, or use
+`TINYSEARCH_ONNX_MODEL_DIR` only when you need to point at one exact bundle
+directory.
 
 ## MCP Setup
 
@@ -97,6 +99,82 @@ Windows:
   }
 }
 ```
+
+Docker with MCP over HTTP:
+
+Docker is MCP-first. Released images are published as:
+
+```text
+marcellm01/tinysearch:<version>
+marcellm01/tinysearch:latest
+```
+
+Start the published MCP image:
+
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  -v tinysearch-models:/data/models \
+  -v "$PWD/configs/research_config.json:/config/research_config.json:ro" \
+  -e TINYSEARCH_CONFIG_PATH=/config/research_config.json \
+  -e TINYSEARCH_MODELS_DIR=/data/models \
+  -e MCP_TRANSPORT=streamable-http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8000 \
+  marcellm01/tinysearch:latest
+```
+
+Then point any MCP client that supports streamable HTTP at:
+
+```text
+http://localhost:8000/mcp
+```
+
+Example MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "tinysearch": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+Docker with MCP over stdio:
+
+Use this mode for MCP clients that launch tools as local commands instead of
+connecting to a URL. Add a Docker-backed command entry to your MCP client config. Replace
+`/absolute/path/to/TinySearch` with this repo's absolute path:
+
+```json
+{
+  "mcpServers": {
+    "tinysearch": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "tinysearch-models:/data/models",
+        "-v",
+        "/absolute/path/to/TinySearch/configs/research_config.json:/config/research_config.json:ro",
+        "-e",
+        "TINYSEARCH_CONFIG_PATH=/config/research_config.json",
+        "-e",
+        "TINYSEARCH_MODELS_DIR=/data/models",
+        "marcellm01/tinysearch:latest"
+      ]
+    }
+  }
+}
+```
+
+Edit `configs/research_config.json` to choose `embedding_model` (`fast`,
+`balanced`, `quality`, or a custom Hugging Face ONNX repo id). The named Docker
+volume keeps downloaded model bundles between launches.
 
 The MCP server exposes one tool:
 
@@ -212,12 +290,14 @@ SEARCH-GROUNDED ANSWER PROMPT
 
 ## Configuration
 
-Tune research defaults in `configs/research_config.json`:
+Tune research defaults in `configs/research_config.json`. Set
+`TINYSEARCH_CONFIG_PATH` to load a different JSON config file, which is the
+recommended Docker override pattern.
 
 - Search: `search_top_k`, `search_rrf_cutoff`, `search_dense_weight`, `search_max_results_to_keep`
 - Chunks: `chunk_rrf_cutoff`, `chunk_dense_weight`, `chunk_max_results_to_keep` (default `2`, global across the chunk pool)
 - Crawl: `crawl_max_chunk_tokens` (default `300`, counted with the embedding model tokenizer), `crawl_overlap_tokens`, `max_concurrent_crawls`
-- Embeddings: `embedding_backend` (`onnx` = local ONNX bundle, `openai_compatible` = API; legacy `default` still aliases to `onnx`), `embedding_model` (`fast`, `balanced`, `quality`, or a custom Hugging Face ONNX repo id), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_ONNX_MODEL_DIR` for an expert bundle path override
+- Embeddings: `embedding_backend` (`onnx` = local ONNX bundle, `openai_compatible` = API; legacy `default` still aliases to `onnx`), `embedding_model` (`fast`, `balanced`, `quality`, or a custom Hugging Face ONNX repo id), `embedding_openai_env_file` (path to `.env` for API URL, key, and model when using `openai_compatible`), `max_concurrent_embedding_calls`; optional `TINYSEARCH_MODELS_DIR` for the model cache root, or `TINYSEARCH_ONNX_MODEL_DIR` for an exact expert bundle path override
 - Tokenizer: `encoding_name` defaults to `embedding`, which means chunk budgets use the tokenizer for the configured embedding backend. Set it to a specific tiktoken encoding or local tokenizer path only when you intentionally want a different counter.
 - Dense input prefixes: `dense_query_prefix`, `dense_document_prefix`
 - Trace: `trace_path`
@@ -247,6 +327,8 @@ embedding bundle at runtime from Hugging Face. Those weights are separate distri
 under their model-card licenses; keep license and attribution notices if you ship or
 redistribute those files. Optional manual export for `fast` uses
 `sentence-transformers/all-MiniLM-L6-v2` (Apache-2.0).
+
+See [NOTICE](NOTICE) for Docker and third-party distribution notes.
 
 ## Privacy Notes
 

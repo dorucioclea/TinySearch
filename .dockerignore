@@ -1,0 +1,15 @@
+.git/
+.githooks/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+trace_logs/
+models/*
+!models/.gitkeep
+!models/README.md

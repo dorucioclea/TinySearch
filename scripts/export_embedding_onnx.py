@@ -2,8 +2,8 @@
 Export sentence-transformers/all-MiniLM-L6-v2 to ONNX + tokenizer files for TinySearch.
 
 Writes to models/all-minilm-l6-v2-onnx/ (repo root). Requires PyTorch, transformers,
-sentence-transformers, and the ``onnx`` package (``pip install onnx``). Runtime
-inference uses ``onnxruntime`` only.
+and the ``onnx`` package (``pip install torch transformers onnx``). Runtime inference
+uses ``onnxruntime`` and ``tokenizers`` only.
 
 Run:
 

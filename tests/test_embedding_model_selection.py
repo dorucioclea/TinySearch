@@ -46,6 +46,53 @@ class EmbeddingModelSelectionTests(unittest.TestCase):
         self.assertEqual(spec.local_dir.name, "some-org-some-onnx-embedding-repo-onnx")
         self.assertFalse(spec.is_preset)
 
+    def test_models_dir_env_sets_model_cache_root(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            with patch.dict(
+                os.environ,
+                {"TINYSEARCH_MODELS_DIR": td, "TINYSEARCH_ONNX_MODEL_DIR": ""},
+                clear=False,
+            ):
+                balanced = resolve_local_embedding_model_spec("balanced")
+                custom = resolve_local_embedding_model_spec("some-org/custom-model")
+
+        self.assertEqual(
+            balanced.local_dir,
+            (Path(td) / "bge-small-en-v1.5-onnx").resolve(),
+        )
+        self.assertEqual(
+            custom.local_dir,
+            (Path(td) / "some-org-custom-model-onnx").resolve(),
+        )
+
+    def test_exact_onnx_model_dir_env_overrides_models_root(self) -> None:
+        with tempfile.TemporaryDirectory() as models_td:
+            with tempfile.TemporaryDirectory() as bundle_td:
+                with patch.dict(
+                    os.environ,
+                    {
+                        "TINYSEARCH_MODELS_DIR": models_td,
+                        "TINYSEARCH_ONNX_MODEL_DIR": bundle_td,
+                    },
+                    clear=False,
+                ):
+                    spec = resolve_local_embedding_model_spec("quality")
+
+        self.assertEqual(spec.local_dir, Path(bundle_td).resolve())
+
+    def test_config_path_env_loads_mounted_config(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            config_path = Path(td) / "research_config.json"
+            config_path.write_text(
+                '{"embedding_backend": "onnx", "embedding_model": "balanced"}',
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"TINYSEARCH_CONFIG_PATH": str(config_path)}):
+                cfg = load_research_config()
+
+        self.assertEqual(cfg["embedding_model"], "balanced")
+        self.assertEqual(cfg["embedding_backend"], "onnx")
+
     def test_embedding_tokenizer_uses_selected_model_bundle_dir(self) -> None:
         cfg = {
             "encoding_name": "embedding",

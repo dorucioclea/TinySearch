@@ -9,8 +9,9 @@ __pycache__/
 venv/
 .venv/
 
-# MiniLM ONNX bundle (auto-download on MCP/API startup when embedding_backend is default,
-# or produced by scripts/export_embedding_onnx.py). Apache-2.0 — do not relicense as MIT.
+# Local model bundles. These can be large and are downloaded/exported on demand.
 models/*
+!models/.gitkeep
+!models/README.md
 
 .githooks/

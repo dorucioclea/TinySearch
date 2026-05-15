@@ -1,0 +1,40 @@
+services:
+  mcp:
+    build:
+      context: .
+      target: mcp
+      args:
+        TINYSEARCH_VERSION: local
+    image: tinysearch:local
+    ports:
+      - "8000:8000"
+    volumes:
+      - tinysearch-models:/data/models
+      - ./configs/research_config.json:/config/research_config.json:ro
+    environment:
+      TINYSEARCH_MODELS_DIR: /data/models
+      TINYSEARCH_CONFIG_PATH: /config/research_config.json
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+
+  fastapi:
+    build:
+      context: .
+      target: fastapi
+      args:
+        TINYSEARCH_VERSION: local
+    image: tinysearch-fastapi:local
+    profiles:
+      - fastapi
+    ports:
+      - "8001:8000"
+    volumes:
+      - tinysearch-models:/data/models
+      - ./configs/research_config.json:/config/research_config.json:ro
+    environment:
+      TINYSEARCH_MODELS_DIR: /data/models
+      TINYSEARCH_CONFIG_PATH: /config/research_config.json
+
+volumes:
+  tinysearch-models:

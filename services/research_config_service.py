@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +104,8 @@ def _coerce_config(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_research_config(path: str | Path | None = None) -> dict[str, Any]:
-    config_path = Path(path) if path is not None else DEFAULT_RESEARCH_CONFIG_PATH
+    raw_path = path if path is not None else os.environ.get("TINYSEARCH_CONFIG_PATH")
+    config_path = Path(raw_path) if raw_path else DEFAULT_RESEARCH_CONFIG_PATH
     if not config_path.is_absolute():
         config_path = PROJECT_ROOT / config_path
     if not config_path.exists():

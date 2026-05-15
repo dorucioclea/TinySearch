@@ -24,6 +24,18 @@ from services.research_config_service import (
 from services.token_counter_service import token_count
 
 
+def _mcp_host() -> str:
+    return os.environ.get("MCP_HOST", "127.0.0.1").strip() or "127.0.0.1"
+
+
+def _mcp_port() -> int:
+    raw = os.environ.get("MCP_PORT", "8000").strip()
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("MCP_PORT must be an integer") from exc
+
+
 MCP_INSTRUCTIONS = """
 This MCP server exposes one high-level web research tool:
 
@@ -82,6 +94,8 @@ def _enable_traceback_dump() -> None:
 mcp = FastMCP(
     "tinysearch",
     instructions=MCP_INSTRUCTIONS,
+    host=_mcp_host(),
+    port=_mcp_port(),
 )
 
 

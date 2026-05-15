@@ -41,7 +41,7 @@ DEFAULT_RESEARCH_CONFIG: dict[str, Any] = {
     "crawl_max_chunk_tokens": 300,
     "crawl_overlap_tokens": 80,
     "crawl_max_page_tokens": 0,
-    "encoding_name": "embedding",
+    "encoding_name": "o200k_base",
     "embedding_backend": DEFAULT_EMBEDDING_BACKEND,
     "embedding_model": DEFAULT_EMBEDDING_MODEL,
     "embedding_openai_env_file": DEFAULT_EMBEDDING_OPENAI_ENV_FILE,

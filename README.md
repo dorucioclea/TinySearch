@@ -199,6 +199,8 @@ Example MCP client config:
 }
 ```
 
+With **`MCP_TRANSPORT=streamable-http`**, this image serves **Streamable HTTP** on **`/mcp`** and **SSE** on **`/mcp/sse`** together, so your client can keep using **`http://localhost:8000/mcp`** without adding **`/sse`** manually. **GET** requests to **`/mcp`** without an **`mcp-session-id`** (typical SSE-only tools) are treated as the legacy SSE stream. If something still cannot connect, try **`MCP_TRANSPORT=sse`** alone or the **stdio** Docker setup below.
+
 ### Docker with MCP over stdio
 
 Use this mode for MCP clients that launch tools as local commands instead of

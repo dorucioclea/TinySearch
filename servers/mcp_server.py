@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import faulthandler
 import os
 import sys
 import time
-import faulthandler
 from pathlib import Path
 from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+from starlette.datastructures import Headers
+from starlette.routing import BaseRoute, Mount, Route
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
-
-from mcp.server.fastmcp import FastMCP
 
 from pipelines.agentic_research import agentic_run
 from services.embedding_service import normalize_embedding_backend
@@ -34,6 +36,91 @@ def _mcp_port() -> int:
         return int(raw)
     except ValueError as exc:
         raise ValueError("MCP_PORT must be an integer") from exc
+
+
+class _StreamablePathLegacySseBridge:
+    """Starlette ``Route`` wraps async *functions* as request handlers; raw ASGI must be a non-function callable."""
+
+    def __init__(self, streamable_asgi: Any, sse_starlette: Any, sse_path: str) -> None:
+        self._streamable = streamable_asgi
+        self._sse = sse_starlette
+        self._sse_path = sse_path
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self._streamable(scope, receive, send)
+            return
+        if scope.get("method", "GET").upper() == "GET":
+            headers = Headers(scope=scope)
+            if not (headers.get("mcp-session-id") or "").strip():
+                sse_scope = dict(scope)
+                sse_scope["path"] = self._sse_path
+                sse_scope["raw_path"] = self._sse_path.encode("ascii")
+                await self._sse(sse_scope, receive, send)
+                return
+        await self._streamable(scope, receive, send)
+
+
+def _route_identity(route: BaseRoute) -> tuple[Any, ...]:
+    if isinstance(route, Route):
+        methods = route.methods
+        key_methods: tuple[str, ...] = (
+            tuple(sorted(methods)) if methods is not None else ("*",)
+        )
+        return ("Route", route.path, key_methods)
+    if isinstance(route, Mount):
+        return ("Mount", route.path)
+    return ("other", type(route).__name__, id(route))
+
+
+async def _run_streamable_http_combined_async() -> None:
+    """Streamable HTTP on /mcp plus SSE on /mcp/sse; sessionless GET /mcp → SSE for strict-URL clients."""
+
+    import uvicorn
+    from starlette.applications import Starlette
+
+    stream_app = mcp.streamable_http_app()
+    sse_starlette = mcp.sse_app()
+    mcp_path = mcp.settings.streamable_http_path
+    sse_path = mcp.settings.sse_path
+
+    streamable_asgi: Any = None
+    bridged_stream_routes: list[BaseRoute] = []
+    for r in stream_app.routes:
+        if isinstance(r, Route) and r.path == mcp_path:
+            streamable_asgi = r.endpoint
+            bridged_stream_routes.append(
+                Route(
+                    mcp_path,
+                    endpoint=_StreamablePathLegacySseBridge(
+                        streamable_asgi, sse_starlette, sse_path
+                    ),
+                    methods=r.methods,
+                )
+            )
+        else:
+            bridged_stream_routes.append(r)
+
+    if streamable_asgi is None:
+        raise RuntimeError(f"No Route found for Streamable HTTP path {mcp_path!r}")
+
+    primary_keys = {_route_identity(r) for r in bridged_stream_routes}
+    extra_sse = [
+        r for r in sse_starlette.routes if _route_identity(r) not in primary_keys
+    ]
+    app = Starlette(
+        debug=mcp.settings.debug,
+        routes=bridged_stream_routes + extra_sse,
+        middleware=stream_app.user_middleware,
+        lifespan=stream_app.router.lifespan_context,
+    )
+    config = uvicorn.Config(
+        app,
+        host=mcp.settings.host,
+        port=mcp.settings.port,
+        log_level=mcp.settings.log_level.lower(),
+    )
+    await uvicorn.Server(config).serve()
 
 
 MCP_INSTRUCTIONS = """
@@ -96,6 +183,8 @@ mcp = FastMCP(
     instructions=MCP_INSTRUCTIONS,
     host=_mcp_host(),
     port=_mcp_port(),
+    sse_path="/mcp/sse",
+    message_path="/mcp/messages/",
 )
 
 
@@ -140,4 +229,9 @@ if __name__ == "__main__":
             "MCP_TRANSPORT must be one of: stdio, sse, streamable-http "
             "(default stdio for IDE-spawned MCP; set env only for standalone HTTP/SSE)"
         )
-    mcp.run(transport=transport)
+    if transport == "streamable-http":
+        import anyio
+
+        anyio.run(_run_streamable_http_combined_async)
+    else:
+        mcp.run(transport=transport)

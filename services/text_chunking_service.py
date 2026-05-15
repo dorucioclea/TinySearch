@@ -73,7 +73,8 @@ def chunk_text(
             step = max_chunk_tokens
 
         for start in range(0, len(tokens), step):
-            piece = encoding.decode(tokens[start : start + max_chunk_tokens]).strip()
+            end = min(start + max_chunk_tokens, len(tokens))
+            piece = encoding.decode(tokens[start:end]).strip()
             if piece:
                 chunks.append(
                     {

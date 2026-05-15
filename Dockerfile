@@ -11,7 +11,8 @@ LABEL org.opencontainers.image.title="TinySearch" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    TINYSEARCH_MODELS_DIR=/data/models
+    TINYSEARCH_MODELS_DIR=/data/models \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -20,9 +21,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --upgrade pip \
+# Browsers in a world-readable path so the non-root runtime user can launch Chromium.
+RUN mkdir -p /ms-playwright \
+    && pip install --upgrade pip \
     && pip install -r requirements.txt \
-    && python -m playwright install --with-deps chromium
+    && python -m playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright
 
 COPY . .
 

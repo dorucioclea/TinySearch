@@ -14,7 +14,11 @@ class HuggingFaceTokenizerAdapter:
         self._tokenizer = tokenizer
 
     def encode(self, text: str) -> list[int]:
-        return self._tokenizer.encode(text, add_special_tokens=False)
+        return self._tokenizer.encode(
+            text,
+            add_special_tokens=False,
+            truncation=False,
+        )
 
     def decode(self, tokens: list[int]) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens=True)
@@ -42,6 +46,12 @@ class TiktokenAdapter:
 class TokenizersAdapter:
     def __init__(self, tokenizer: Any) -> None:
         self._tokenizer = tokenizer
+        no_trunc = getattr(self._tokenizer, "no_truncation", None)
+        if callable(no_trunc):
+            no_trunc()
+        no_pad = getattr(self._tokenizer, "no_padding", None)
+        if callable(no_pad):
+            no_pad()
 
     def encode(self, text: str) -> list[int]:
         return self._tokenizer.encode(text).ids
@@ -124,17 +134,23 @@ def resolve_tokenizer(
     model: str | None = None,
 ):
     """
-    Resolve the best available tokenizer for token counting.
+    Resolve a tokenizer for chunking and token counting.
 
-    Prefer a locally available Hugging Face tokenizer for model-like names,
-    then tiktoken's explicit encoding/model mapping, then fall back to the
-    default OpenAI tokenizer.
+    Default config uses an explicit tiktoken encoding (e.g. ``o200k_base``). That keeps
+    chunking simple; token counts may not match the ONNX embedder's tokenizer unless
+    ``encoding_name`` is set to ``embedding`` (bundle ``tokenizer.json``).
     """
     tokenizer_name = normalize_tokenizer_name(tokenizer_name)
     if tokenizer_name:
         encoding = _get_tiktoken_encoding(tokenizer_name)
         if encoding is not None:
             return encoding
+        tokenizers_json = _resolve_tokenizers_json(tokenizer_name)
+        if tokenizers_json is not None:
+            return tokenizers_json
+        hf_tokenizer = _resolve_huggingface_tokenizer(tokenizer_name)
+        if hf_tokenizer is not None:
+            return hf_tokenizer
 
     candidates = [tokenizer_name, model]
     for candidate in candidates:

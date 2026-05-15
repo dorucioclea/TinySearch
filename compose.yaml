@@ -8,6 +8,7 @@ services:
     image: tinysearch:local
     ports:
       - "8000:8000"
+    shm_size: "1gb"
     volumes:
       - tinysearch-models:/data/models
       - ./configs/research_config.json:/config/research_config.json:ro
@@ -29,6 +30,7 @@ services:
       - fastapi
     ports:
       - "8001:8000"
+    shm_size: "1gb"
     volumes:
       - tinysearch-models:/data/models
       - ./configs/research_config.json:/config/research_config.json:ro

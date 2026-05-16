@@ -24,6 +24,35 @@ No hosted dashboard. No account system. No analytics. No scraped-data cache.
 
 Just search -> crawl -> rerank -> grounded prompt.
 
+## Quick start
+
+Run TinySearch as an MCP server over Streamable HTTP:
+
+```bash
+docker run --rm -p 8000:8000 -e MCP_TRANSPORT=streamable-http -e MCP_HOST=0.0.0.0 marcellm01/tinysearch:latest
+```
+
+Then connect your MCP client to:
+
+```json
+{
+  "mcpServers": {
+    "tinysearch": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+TinySearch exposes one MCP tool:
+
+```text
+research(query)
+```
+
+Pass the user's question as-is. TinySearch searches, crawls, reranks, and
+returns the grounded prompt in `answer`.
+
 ## Why TinySearch?
 
 - Give local agents web research without wiring together a whole search stack.
@@ -82,7 +111,10 @@ INSTRUCTIONS
 Answer only from the results. Cite source URLs.
 ```
 
-## Quick start
+## Run from source
+
+Use this path if you want to inspect the code, edit TinySearch, or run it as a
+local stdio MCP server.
 
 ```bash
 git clone https://github.com/MarcellM01/TinySearch
@@ -93,21 +125,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run the MCP server:
-
-```bash
-python servers/mcp_server.py
-```
-
-Or run the HTTP API:
-
-```bash
-uvicorn servers.fastapi_server:app --reload
-```
-
-## MCP setup
-
-Add TinySearch to your MCP client config. Use absolute paths.
+MCP clients spawn TinySearch from their config. Add it with absolute paths:
 
 macOS / Linux:
 
@@ -139,15 +157,6 @@ Windows:
 }
 ```
 
-The MCP server exposes one tool:
-
-```text
-research(query)
-```
-
-Pass the user's question as-is. TinySearch searches, crawls, reranks, and returns
-the grounded prompt in `answer`.
-
 Template config files live in `mcp_templates/`.
 
 The repo also includes [`agentic_coding_templates/global-rules-recommended.md`](agentic_coding_templates/global-rules-recommended.md),
@@ -162,48 +171,16 @@ transport in `configs/research_config.json`.
 
 ## Docker
 
-Pull the default image:
+The [quick start](#quick-start) command runs TinySearch over Streamable HTTP on
+`http://localhost:8000/mcp`. Docker pulls `marcellm01/tinysearch:latest`
+automatically if the image is not already local.
 
-```bash
-docker pull marcellm01/tinysearch:latest
-```
+With `MCP_TRANSPORT=streamable-http`, the image serves Streamable HTTP on
+`/mcp` and SSE on `/mcp/sse`. GET requests to `/mcp` without an
+`mcp-session-id` are treated as the legacy SSE stream. If a client still cannot
+connect, try `MCP_TRANSPORT=sse` alone or the stdio Docker setup below.
 
-### MCP over HTTP
-
-Most MCP clients that connect to a running server use this mode.
-
-Start TinySearch on port 8000:
-
-```bash
-docker run --rm \
-  -p 8000:8000 \
-  -e MCP_TRANSPORT=streamable-http \
-  -e MCP_HOST=0.0.0.0 \
-  marcellm01/tinysearch:latest
-```
-
-Then point any MCP client that supports streamable HTTP at:
-
-```text
-http://localhost:8000/mcp
-```
-
-Example MCP client config:
-
-```json
-{
-  "mcpServers": {
-    "tinysearch": {
-      "url": "http://localhost:8000/mcp"
-    }
-  }
-}
-```
-
-With `MCP_TRANSPORT=streamable-http`, the image serves Streamable HTTP on `/mcp`
-and SSE on `/mcp/sse`. GET requests to `/mcp` without an `mcp-session-id`
-are treated as the legacy SSE stream. If a client still cannot connect, try
-`MCP_TRANSPORT=sse` alone or the stdio Docker setup below.
+### Persistent models and config
 
 For repeated use, keep downloaded models in a Docker volume and mount your local
 config:

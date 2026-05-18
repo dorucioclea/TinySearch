@@ -324,6 +324,12 @@ Run the unittest suite:
 python -m unittest discover tests
 ```
 
+## Contact
+
+Using TinySearch or want to build on it?
+
+[Email me](mailto:hello.marcbuilds@gmail.com) or reach me on [Bluesky](https://bsky.app/profile/marcellm01.bsky.social).
+
 ## Privacy notes
 
 TinySearch reads the pages it crawls and returns ranked excerpts to the calling

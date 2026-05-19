@@ -9,6 +9,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/MarcellM01/TinySearch)](https://github.com/MarcellM01/TinySearch/commits/main)
 [![MCP](https://img.shields.io/badge/MCP-research%20tool-222222)](https://modelcontextprotocol.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![TinySearch MCP server](https://glama.ai/mcp/servers/MarcellM01/TinySearch/badges/score.svg)](https://glama.ai/mcp/servers/MarcellM01/TinySearch)
 
 A tiny local-first web research engine for MCP agents.
 
